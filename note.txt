@@ -1,0 +1,1 @@
+python3 customized-train.py --num-gpus 2 --config-file ./da-maskrcnn-fpn-config.py
