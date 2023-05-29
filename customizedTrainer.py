@@ -22,10 +22,13 @@ class customSimpleTrainer(SimpleTrainer):
         super().__init__(model, data_loader, optimizer)
 
         self.target_data_loader = target_data_loader
+        # to access the data loader iterator, call `self._data_loader_iter`
+        self._target_data_loader_iter_obj = None
 
     @property
     def _target_data_loader_iter(self):
-        self._target_data_loader_iter_obj = iter(self.target_data_loader)
+        if self._target_data_loader_iter_obj is None:
+            self._target_data_loader_iter_obj = iter(self.target_data_loader)
         
         return self._target_data_loader_iter_obj
 
@@ -39,8 +42,8 @@ class customSimpleTrainer(SimpleTrainer):
         If you want to do something with the data, you can wrap the dataloader.
         """
         data = next(self._data_loader_iter)
-        data_time = time.perf_counter() - start
         targetData = next(self._target_data_loader_iter)
+        data_time = time.perf_counter() - start
         p = float(self.iter / self.max_iter)
         alpha = 2. / ( 1. + np.exp(-10 * p)) - 1
         alpha3 = alpha if alpha < 0.5 else 0.5
@@ -99,9 +102,13 @@ class customAMPTrainer(AMPTrainer):
         super().__init__(model, data_loader, optimizer, grad_scaler)
 
         self.target_data_loader = target_data_loader
+        # to access the data loader iterator, call `self._data_loader_iter`
+        self._target_data_loader_iter_obj = None
+
     @property
     def _target_data_loader_iter(self):
-        self._target_data_loader_iter_obj = iter(self.target_data_loader)
+        if self._target_data_loader_iter_obj is None:
+            self._target_data_loader_iter_obj = iter(self.target_data_loader)
         
         return self._target_data_loader_iter_obj
 
