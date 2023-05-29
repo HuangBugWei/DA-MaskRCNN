@@ -40,7 +40,7 @@ from detectron2.data import (
     get_detection_dataset_dicts,
 )
 from utils import get_rebar_dicts, get_no_label_dicts
-from customizedTrainer import customAMPTrainer
+from customizedTrainer import customAMPTrainer, customSimpleTrainer
 
 logger = logging.getLogger("detectron2")
 
@@ -84,14 +84,14 @@ def do_train(args, cfg):
     train_target_loader = instantiate(cfg.dataloader.train_target)
 
     model = create_ddp_model(model, **cfg.train.ddp)
-    # trainer = (customAMPTrainer if cfg.train.amp.enabled else SimpleTrainer)(model, 
-    #                                                                    train_loader, 
-    #                                                                    train_target_loader, 
-    #                                                                    optim)
-    trainer = (customAMPTrainer)(model, 
-                                train_loader, 
-                                train_target_loader, 
-                                optim)
+    trainer = (customAMPTrainer if cfg.train.amp.enabled else customSimpleTrainer)(model, 
+                                                                       train_loader, 
+                                                                       train_target_loader, 
+                                                                       optim)
+    # trainer = (customAMPTrainer)(model, 
+    #                             train_loader, 
+    #                             train_target_loader, 
+    #                             optim)
     checkpointer = DetectionCheckpointer(
         model,
         cfg.train.output_dir,
@@ -131,9 +131,9 @@ def main(args):
     cfg = LazyConfig.load(args.config_file)
     cfg = LazyConfig.apply_overrides(cfg, args.opts)
 
-    DatasetCatalog.register('steel_train', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/files-7000.txt", txt=True))
-    DatasetCatalog.register('steel_train_target', lambda :  get_no_label_dicts("/home/aicenter/pytorch-CycleGAN-and-pix2pix/datasets/BIM2Real/trainB"))
-    DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/B.txt", txt=True))
+    DatasetCatalog.register('steel_train', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/files-9920.txt", txt=True))
+    DatasetCatalog.register('steel_train_target', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-target-dataset", txt=False, labeled = False))
+    DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-dataset", txt=False))
     # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("./rebar-revit-auto-dataset/files-200.txt", txt=True))
     MetadataCatalog.get("steel_train").set(thing_classes=['intersection', 'spacing'])
     MetadataCatalog.get("steel_test").set(thing_classes=['intersection', 'spacing'])
@@ -185,12 +185,12 @@ def main(args):
                             )
     cfg.dataloader.train.total_batch_size = 8
     cfg.dataloader.train_target.total_batch_size = 8
-    cfg.train.output_dir = "./DA-7000-3000-"
-    cfg.train.max_iter = 100000
+    cfg.train.output_dir = "./DA-9920-3000"
+    cfg.train.max_iter = 30000
     cfg.train.checkpointer.period = 2000
     cfg.train.eval_period = 2000
-    cfg.optimizer.lr = 0.00005
-    # cfg.dataloader.test.dataset = LazyCall(get_detection_dataset_dicts)(names="steel_test", filter_empty=False)
+    cfg.optimizer.lr = 0.001
+    cfg.lr_multiplier.scheduler.milestones =  [15000, 20000, 25000]
     cfg.dataloader.test = LazyCall(build_detection_test_loader)(
                             dataset=LazyCall(get_detection_dataset_dicts)(names="steel_test", filter_empty=False),
                             mapper=LazyCall(DatasetMapper)(

@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 from detectron2.structures import BoxMode
 
-def get_rebar_dicts(img_dir, txt = True):
+def get_rebar_dicts(img_dir, txt = True, labeled = True):
     dataset_dicts = []
     folder = os.path.dirname(os.path.abspath(img_dir))
     jsonFolder = []
@@ -17,8 +17,12 @@ def get_rebar_dicts(img_dir, txt = True):
     # for idx, json_file in enumerate(glob.glob(os.path.join(img_dir, "json", "*.json"))):
     for idx, json_file in enumerate(jsonFolder):
         
-        with open(json_file) as f:
-            imgs_anns = json.load(f)
+        try:
+            with open(json_file) as f:
+                imgs_anns = json.load(f)
+        except:
+            print(json_file)
+            break
 
         record = {}
         
@@ -28,36 +32,38 @@ def get_rebar_dicts(img_dir, txt = True):
         record["image_id"] = idx
         record["height"] = imgs_anns["imageHeight"]
         record["width"] = imgs_anns["imageWidth"]
-      
-        annos = imgs_anns["shapes"]
-        # annos: list[dict]
         
-        objs = []
-        for anno in annos:
-            # anno: dict
-            
-            # fix some data may have wrong label, such as polygon with only 2 or 1 points...
-            # triangle shape also is not reasonable to our task so I set the threshold at 4
-            if len(anno["points"]) < 4:
-                continue
-            
-            px = [pair[0] for pair in anno["points"]]
-            py = [pair[1] for pair in anno["points"]]
-            poly = [p for x in anno["points"] for p in x]
-            if anno["label"] == "intersection":
-                cls = 0
-            if anno["label"] == "spacing":
-                cls = 1
+        if labeled:
 
-            obj = {
-                "bbox": [np.min(px), np.min(py), np.max(px), np.max(py)],
-                "bbox_mode": BoxMode.XYXY_ABS,
-                "segmentation": [poly],
-                "category_id": cls,
-                "iscrowd": 0,
-            }
-            objs.append(obj)
-        record["annotations"] = objs
+            annos = imgs_anns["shapes"]
+            # annos: list[dict]
+            
+            objs = []
+            for anno in annos:
+                # anno: dict
+                
+                # fix some data may have wrong label, such as polygon with only 2 or 1 points...
+                # triangle shape also is not reasonable to our task so I set the threshold at 4
+                if len(anno["points"]) < 4:
+                    continue
+                
+                px = [pair[0] for pair in anno["points"]]
+                py = [pair[1] for pair in anno["points"]]
+                poly = [p for x in anno["points"] for p in x]
+                if anno["label"] == "intersection":
+                    cls = 0
+                if anno["label"] == "spacing":
+                    cls = 1
+
+                obj = {
+                    "bbox": [np.min(px), np.min(py), np.max(px), np.max(py)],
+                    "bbox_mode": BoxMode.XYXY_ABS,
+                    "segmentation": [poly],
+                    "category_id": cls,
+                    "iscrowd": 0,
+                }
+                objs.append(obj)
+            record["annotations"] = objs
         
         dataset_dicts.append(record)
     return dataset_dicts
