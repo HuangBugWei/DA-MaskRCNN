@@ -44,6 +44,8 @@ class customSimpleTrainer(SimpleTrainer):
         data = next(self._data_loader_iter)
         targetData = next(self._target_data_loader_iter)
         data_time = time.perf_counter() - start
+        data += targetData
+        
         p = float(self.iter / self.max_iter)
         alpha = 2. / ( 1. + np.exp(-10 * p)) - 1
         alpha3 = alpha if alpha < 0.5 else 0.5
@@ -51,14 +53,7 @@ class customSimpleTrainer(SimpleTrainer):
         alpha5 = alpha if alpha < 0.1 else 0.1
 
         loss_dict = self.model(data, False, alpha3, alpha4, alpha5)
-        loss_dict_target = self.model(targetData, True, alpha3, alpha4, alpha5)
-        loss_dict["loss_r3"] += loss_dict_target["loss_r3"]
-        loss_dict["loss_r4"] += loss_dict_target["loss_r4"]
-        loss_dict["loss_r5"] += loss_dict_target["loss_r5"]
-
-        loss_dict["loss_r3"] *= 0.5
-        loss_dict["loss_r4"] *= 0.5
-        loss_dict["loss_r5"] *= 0.5
+        
         if isinstance(loss_dict, torch.Tensor):
             losses = loss_dict
             loss_dict = {"total_loss": loss_dict}

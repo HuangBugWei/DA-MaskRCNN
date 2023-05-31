@@ -33,8 +33,8 @@ class customRCNN(GeneralizedRCNN):
     def forward(self, 
                 batched_inputs: List[Dict[str, torch.Tensor]], 
                 on_domain_target = False, 
-                alpha3 = 1, 
-                alpha4 = 1, 
+                alpha3 = 1,
+                alpha4 = 1,
                 alpha5 = 1):
         """
         Args:
@@ -60,27 +60,36 @@ class customRCNN(GeneralizedRCNN):
         """
         if not self.training:
             return self.inference(batched_inputs)
-
+        
         images = self.preprocess_image(batched_inputs)
-        if "instances" in batched_inputs[0]:
-            gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-        else:
+        features, res = self.backbone(images.tensor)
+        gt_instances = []
+        selected_idx = []
+        domain_label = []
+        for batch_idx, x in enumerate(batched_inputs):
+            if "instances" in x:
+                gt_instances.append(x["instances"].to(self.device))
+                selected_idx.append(batch_idx)
+                domain_label.append([0])
+            else:
+                domain_label.append([1])
+        if len(gt_instances) == 0:
             gt_instances = None
 
-        features, res = self.backbone(images.tensor)
+        domain_label = torch.tensor(domain_label).float().to(self.device)
+        
+        # modified features, filter those from target domain data
+        for key in features.keys():
+            features[key] = torch.index_select(features[key], 0, torch.tensor(selected_idx).to(self.device))
+        
+        batched_inputs = [x for batch_idx, x in enumerate(batched_inputs) if batch_idx in selected_idx]
+        del images
+        images = self.preprocess_image(batched_inputs)
 
-        if on_domain_target:
-            loss_res3 = self.discriminatorRes3(res["res3"], on_domain_target, alpha3)
-            loss_res4 = self.discriminatorRes4(res["res4"], on_domain_target, alpha4)
-            loss_res5 = self.discriminatorRes5(res["res5"], on_domain_target, alpha5)
-            
-            # early return
-            return {"loss_r3": loss_res3, "loss_r4": loss_res4, "loss_r5": loss_res5}
-        else:
-            loss_res3 = self.discriminatorRes3(res["res3"], on_domain_target, alpha3)
-            loss_res4 = self.discriminatorRes4(res["res4"], on_domain_target, alpha4)
-            loss_res5 = self.discriminatorRes5(res["res5"], on_domain_target, alpha5)
-
+        loss_res3 = self.discriminatorRes3(res["res3"], domain_label, alpha3)
+        loss_res4 = self.discriminatorRes4(res["res4"], domain_label, alpha4)
+        loss_res5 = self.discriminatorRes5(res["res5"], domain_label, alpha5)
+        
         if self.proposal_generator is not None:
             proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
         else:

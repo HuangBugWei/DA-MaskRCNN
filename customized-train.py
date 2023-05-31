@@ -49,6 +49,20 @@ def do_test(cfg, model):
         ret = inference_on_dataset(
             model, instantiate(cfg.dataloader.test), instantiate(cfg.dataloader.evaluator)
         )
+        with open(os.path.join(cfg.train.output_dir, "test_target.json"), "a") as f:
+            json.dump(ret, f)
+            f.write("\n")
+        print_csv_format(ret)
+        return ret
+
+def do_source_test(cfg, model):
+    if "evaluator_source" in cfg.dataloader and "test_source" in cfg.dataloader:
+        ret = inference_on_dataset(
+            model, instantiate(cfg.dataloader.test_source), instantiate(cfg.dataloader.evaluator_source)
+        )
+        with open(os.path.join(cfg.train.output_dir, "test_source.json"), "a") as f:
+            json.dump(ret, f)
+            f.write("\n")
         print_csv_format(ret)
         return ret
 
@@ -107,7 +121,8 @@ def do_train(args, cfg):
             else None,
 
             hooks.EvalHook(cfg.train.eval_period, lambda: do_test(cfg, model)),
-            
+            hooks.EvalHook(cfg.train.eval_period, lambda: do_source_test(cfg, model)),
+
             hooks.PeriodicWriter(
                 default_writers(cfg.train.output_dir, cfg.train.max_iter),
                 period=cfg.train.log_period,
@@ -134,9 +149,11 @@ def main(args):
     DatasetCatalog.register('steel_train', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/files-9920.txt", txt=True))
     DatasetCatalog.register('steel_train_target', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-target-dataset", txt=False, labeled = False))
     DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-dataset", txt=False))
+    DatasetCatalog.register('steel_test_source', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt=True))
     # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("./rebar-revit-auto-dataset/files-200.txt", txt=True))
     MetadataCatalog.get("steel_train").set(thing_classes=['intersection', 'spacing'])
     MetadataCatalog.get("steel_test").set(thing_classes=['intersection', 'spacing'])
+    MetadataCatalog.get("steel_test_source").set(thing_classes=['intersection', 'spacing'])
     cfg.dataloader.train = LazyCall(build_detection_train_loader)(
                             dataset=LazyCall(get_detection_dataset_dicts)(names="steel_train"),
                             mapper=LazyCall(DatasetMapper)(
@@ -183,14 +200,15 @@ def main(args):
                             total_batch_size=10,
                             num_workers=4,
                             )
-    cfg.dataloader.train.total_batch_size = 8
-    cfg.dataloader.train_target.total_batch_size = 8
-    cfg.train.output_dir = "./DA-9920-3000"
-    cfg.train.max_iter = 30000
-    cfg.train.checkpointer.period = 2000
-    cfg.train.eval_period = 2000
-    cfg.optimizer.lr = 0.001
-    cfg.lr_multiplier.scheduler.milestones =  [15000, 20000, 25000]
+    cfg.dataloader.train.total_batch_size = 4
+    cfg.dataloader.train_target.total_batch_size = 4
+    cfg.train.output_dir = "./da-test"
+    cfg.train.max_iter = 100000
+    cfg.train.checkpointer.period = 500
+    cfg.train.eval_period = 500
+    cfg.train.log_period = 20
+    cfg.optimizer.lr = 0.0003
+    cfg.lr_multiplier.scheduler.milestones =  [6000, 10000, 15000]
     cfg.dataloader.test = LazyCall(build_detection_test_loader)(
                             dataset=LazyCall(get_detection_dataset_dicts)(names="steel_test", filter_empty=False),
                             mapper=LazyCall(DatasetMapper)(
@@ -202,8 +220,23 @@ def main(args):
                             ),
                             num_workers=4,
                             )
+    cfg.dataloader.test_source = LazyCall(build_detection_test_loader)(
+                            dataset=LazyCall(get_detection_dataset_dicts)(names="steel_test_source", filter_empty=False),
+                            mapper=LazyCall(DatasetMapper)(
+                                is_train=False,
+                                augmentations=[
+                                    LazyCall(T.ResizeShortestEdge)(short_edge_length=800, max_size=1333),
+                                ],
+                                image_format="${...train.mapper.image_format}",
+                            ),
+                            num_workers=4,
+                            )
     cfg.dataloader.evaluator = LazyCall(COCOEvaluator)(
                                     dataset_name="${..test.dataset.names}",
+                                    output_dir=cfg.train.output_dir
+                                )
+    cfg.dataloader.evaluator_source = LazyCall(COCOEvaluator)(
+                                    dataset_name="${..test_source.dataset.names}",
                                     output_dir=cfg.train.output_dir
                                 )
     

@@ -35,23 +35,16 @@ class DiscriminatorRes3(nn.Module):
             if isinstance(m, nn.Conv2d):
                 torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
 
-    def forward(self, x, domain_target = False, alpha = 1):
+    def forward(self, x, domain_label, alpha = 1):
         x = GradReverse.apply(x, alpha)
         x = self.reducer(x) 
         x = torch.flatten(x,1)
-        if domain_target:
-            domain_t = torch.ones(x.size()).float().cuda()
-            loss = sigmoid_focal_loss_jit(x, domain_t, alpha=0.25, gamma=2, reduction="mean")
-            acc = np.exp(-loss.item())
-            storage = get_event_storage()
-            storage.put_scalar("acc_r3", acc)
-        else:
-            domain_s = torch.zeros(x.size()).float().cuda()
-            loss = sigmoid_focal_loss_jit(x, domain_s, alpha=0.25, gamma=2, reduction="mean")
-            acc = np.exp(-loss.item())
-            storage = get_event_storage()
-            storage.put_scalar("acc_r3", acc)
-        return loss #, acc
+
+        loss = sigmoid_focal_loss_jit(x, domain_label, alpha=0.25, gamma=2, reduction="mean")
+        acc = np.exp(-loss.item())
+        storage = get_event_storage()
+        storage.put_scalar("acc_r3", acc)
+        return loss
 
 class DiscriminatorRes4(nn.Module):
     def __init__(self):
@@ -77,23 +70,15 @@ class DiscriminatorRes4(nn.Module):
             if isinstance(m, nn.Conv2d):
                 torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
 
-    def forward(self, x, domain_target = False, alpha = 1):
+    def forward(self, x, domain_label, alpha = 1):
         x = GradReverse.apply(x, alpha)
         x = self.reducer(x) 
         x = torch.flatten(x,1)
         x = self.reducer2(x)
-        if domain_target:
-            domain_t = torch.ones(x.size()).float().cuda()
-            loss = sigmoid_focal_loss_jit(x,domain_t,alpha=0.25,gamma=2,reduction="mean")
-            acc = np.exp(-loss.item())
-            storage = get_event_storage()
-            storage.put_scalar("acc_r4", acc)
-        else:
-            domain_s = torch.zeros(x.size()).float().cuda()
-            loss = sigmoid_focal_loss_jit(x,domain_s,alpha=0.25,gamma=2,reduction="mean")
-            acc = np.exp(-loss.item())
-            storage = get_event_storage()
-            storage.put_scalar("acc_r4", acc)
+        loss = sigmoid_focal_loss_jit(x, domain_label,alpha=0.25,gamma=2,reduction="mean")
+        acc = np.exp(-loss.item())
+        storage = get_event_storage()
+        storage.put_scalar("acc_r4", acc)
         return loss #, acc
         
 class DiscriminatorRes5(nn.Module):
@@ -126,22 +111,15 @@ class DiscriminatorRes5(nn.Module):
             if isinstance(m, nn.Conv2d):
                 torch.nn.init.normal_(m.weight, mean=0.0, std=0.01)
 
-    def forward(self, x, domain_target = False, alpha = 1):
+    def forward(self, x, domain_label, alpha = 1):
         x = GradReverse.apply(x, alpha)
         x = self.reducer(x) 
         x = torch.flatten(x,1)
         x = self.reducer2(x)
-        if domain_target:
-            domain_t = torch.ones(x.size()).float().cuda()
-            loss = sigmoid_focal_loss_jit(x,domain_t,alpha=0.25,gamma=2,reduction="mean")
-            acc = np.exp(-loss.item())
-            storage = get_event_storage()
-            storage.put_scalar("acc_r5", acc)
 
-        else:
-            domain_s = torch.zeros(x.size()).float().cuda()
-            loss = sigmoid_focal_loss_jit(x,domain_s,alpha=0.25,gamma=2,reduction="mean")
-            acc = np.exp(-loss.item())
-            storage = get_event_storage()
-            storage.put_scalar("acc_r5", acc)
+        loss = sigmoid_focal_loss_jit(x,domain_label,alpha=0.25,gamma=2,reduction="mean")
+        acc = np.exp(-loss.item())
+        storage = get_event_storage()
+        storage.put_scalar("acc_r5", acc)
+        
         return loss #, acc
