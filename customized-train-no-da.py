@@ -114,7 +114,7 @@ def do_train(args, cfg):
     model = create_ddp_model(model, **cfg.train.ddp)
     trainer = (customAMPTrainer if cfg.train.amp.enabled else customSimpleTrainer)(model, 
                                                                        train_loader, 
-                                                                       train_target_loader, 
+                                                                       None, 
                                                                        optim)
     # trainer = (customAMPTrainer)(model, 
     #                             train_loader, 
@@ -143,7 +143,7 @@ def do_train(args, cfg):
             )
             if comm.is_main_process()
             else None,
-            customEvalHook(cfg.train.log_period * 5, lambda: do_validation_loss(cfg, model))
+            # customEvalHook(cfg.train.log_period, lambda: do_validation_loss(cfg, model))
         ]
     )
 
@@ -162,7 +162,7 @@ def main(args):
     cfg = LazyConfig.apply_overrides(cfg, args.opts)
 
     DatasetCatalog.register('steel_train', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/files-9920.txt", txt=True))
-    DatasetCatalog.register('steel_train_target', lambda :  get_no_label_dicts("/home/aicenter/maskrcnn/rebar-target-dataset/imgs"))
+    DatasetCatalog.register('steel_train_target', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-target-dataset", txt=False, labeled = False))
     DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-dataset", txt=False))
     DatasetCatalog.register('steel_test_source', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt=True))
     # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("./rebar-revit-auto-dataset/files-200.txt", txt=True))
@@ -189,7 +189,7 @@ def main(args):
                                 image_format="BGR",
                                 use_instance_mask=True,
                             ),
-                            total_batch_size=6,
+                            total_batch_size=10,
                             num_workers=4,
                             )
     cfg.dataloader.train_target = LazyCall(build_detection_train_loader)(
@@ -212,16 +212,19 @@ def main(args):
                                 image_format="BGR",
                                 use_instance_mask=True,
                             ),
-                            total_batch_size=6,
+                            total_batch_size=10,
                             num_workers=4,
-                            ) if cfg.model.do_domain else None
+                            )
+    cfg.dataloader.train.total_batch_size = 4
     cfg.model.roi_heads.num_classes = 2
-    cfg.train.max_iter = 10000
+    cfg.dataloader.train_target.total_batch_size = 4
+    cfg.train.output_dir = "./trial-noda"
+    cfg.train.max_iter = 100000
     cfg.train.checkpointer.period = 500
     cfg.train.eval_period = 500
     cfg.train.log_period = 20
     cfg.optimizer.lr = 0.0003
-    cfg.lr_multiplier.scheduler.milestones =  [5000, 6500, 9000]
+    cfg.lr_multiplier.scheduler.milestones =  [6000, 10000, 15000]
     cfg.dataloader.test = LazyCall(build_detection_test_loader)(
                             dataset=LazyCall(get_detection_dataset_dicts)(names="steel_test", filter_empty=False),
                             mapper=LazyCall(DatasetMapper)(

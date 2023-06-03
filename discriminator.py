@@ -7,6 +7,7 @@ from torch import nn
 from detectron2.utils.events import get_event_storage
 
 from fvcore.nn import sigmoid_focal_loss_jit # smooth_l1_loss
+import torch.nn.functional as F
 
 class GradReverse(torch.autograd.Function):
     @staticmethod
@@ -40,10 +41,11 @@ class DiscriminatorRes3(nn.Module):
         x = self.reducer(x) 
         x = torch.flatten(x,1)
 
+        # loss = F.binary_cross_entropy_with_logits(x, domain_label, reduction="mean")
         loss = sigmoid_focal_loss_jit(x, domain_label, alpha=0.25, gamma=2, reduction="mean")
         acc = np.exp(-loss.item())
-        storage = get_event_storage()
-        storage.put_scalar("acc_r3", acc)
+        # storage = get_event_storage()
+        # storage.put_scalar("acc_r3", acc)
         return loss
 
 class DiscriminatorRes4(nn.Module):
@@ -75,10 +77,11 @@ class DiscriminatorRes4(nn.Module):
         x = self.reducer(x) 
         x = torch.flatten(x,1)
         x = self.reducer2(x)
+        # loss = F.binary_cross_entropy_with_logits(x, domain_label, reduction="mean")
         loss = sigmoid_focal_loss_jit(x, domain_label,alpha=0.25,gamma=2,reduction="mean")
         acc = np.exp(-loss.item())
-        storage = get_event_storage()
-        storage.put_scalar("acc_r4", acc)
+        # storage = get_event_storage()
+        # storage.put_scalar("acc_r4", acc)
         return loss #, acc
         
 class DiscriminatorRes5(nn.Module):
@@ -117,9 +120,10 @@ class DiscriminatorRes5(nn.Module):
         x = torch.flatten(x,1)
         x = self.reducer2(x)
 
+        # loss = F.binary_cross_entropy_with_logits(x, domain_label, reduction="mean")
         loss = sigmoid_focal_loss_jit(x,domain_label,alpha=0.25,gamma=2,reduction="mean")
         acc = np.exp(-loss.item())
-        storage = get_event_storage()
-        storage.put_scalar("acc_r5", acc)
+        # storage = get_event_storage()
+        # storage.put_scalar("acc_r5", acc)
         
         return loss #, acc

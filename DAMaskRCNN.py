@@ -17,7 +17,10 @@ from detectron2.modeling.roi_heads import (
 )
 
 from customizedFPN import customFPN
+from customizedRPN import customRPN
 from customizedRCNN import customRCNN
+from customizedROIHeads import customROIHeads
+from customizedMaskHead import customMaskHead
 
 import torch
 
@@ -149,7 +152,8 @@ constants = dict(
     # When using pre-trained models in Detectron1 or any MSRA models,
     # std has been absorbed into its conv1 weights, so the std needs to be set 1.
     # Otherwise, you can use [57.375, 57.120, 58.395] (ImageNet std)
-    imagenet_bgr256_std=[1.0, 1.0, 1.0],
+    # imagenet_bgr256_std=[1.0, 1.0, 1.0],
+    imagenet_bgr256_std=[57.375, 57.120, 58.395],
 )
 
 model = L(customRCNN)(
@@ -167,7 +171,7 @@ model = L(customRCNN)(
         out_channels=256,
         top_block=L(LastLevelMaxPool)(),
     ),
-    proposal_generator=L(RPN)(
+    proposal_generator=L(customRPN)(
         in_features=["p2", "p3", "p4", "p5", "p6"],
         head=L(StandardRPNHead)(in_channels=256, num_anchors=3),
         anchor_generator=L(DefaultAnchorGenerator)(
@@ -186,7 +190,7 @@ model = L(customRCNN)(
         post_nms_topk=(1000, 1000),
         nms_thresh=0.7,
     ),
-    roi_heads=L(StandardROIHeads)(
+    roi_heads=L(customROIHeads)(
         num_classes=80,
         batch_size_per_image=512,
         positive_fraction=0.25,
@@ -218,7 +222,7 @@ model = L(customRCNN)(
             sampling_ratio=0,
             pooler_type="ROIAlignV2",
         ),
-        mask_head=L(MaskRCNNConvUpsampleHead)(
+        mask_head=L(customMaskHead)(
             input_shape=ShapeSpec(channels=256, width=14, height=14),
             num_classes="${..num_classes}",
             conv_dims=[256, 256, 256, 256, 256],

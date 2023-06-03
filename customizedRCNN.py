@@ -16,7 +16,8 @@ class customRCNN(GeneralizedRCNN):
                 pixel_mean,
                 pixel_std,
                 input_format,
-                vis_period: int = 0):
+                vis_period: int = 0,
+                do_domain = True):
         
         super().__init__(backbone=backbone,
                         proposal_generator=proposal_generator,
@@ -25,14 +26,16 @@ class customRCNN(GeneralizedRCNN):
                         pixel_std=pixel_std,
                         input_format=input_format,
                         vis_period=vis_period)
-
-        self.discriminatorRes3 = DiscriminatorRes3()
-        self.discriminatorRes4 = DiscriminatorRes4()
-        self.discriminatorRes5 = DiscriminatorRes5()
+        self.do_domain = do_domain
+        if self.do_domain:
+            self.discriminatorRes3 = DiscriminatorRes3()
+            self.discriminatorRes4 = DiscriminatorRes4()
+            self.discriminatorRes5 = DiscriminatorRes5()
 
     def forward(self, 
                 batched_inputs: List[Dict[str, torch.Tensor]], 
-                on_domain_target = False, 
+                domain_label = None,
+                calculate_loss = False,
                 alpha3 = 1,
                 alpha4 = 1,
                 alpha5 = 1):
@@ -58,25 +61,23 @@ class customRCNN(GeneralizedRCNN):
                 The :class:`Instances` object has the following keys:
                 "pred_boxes", "pred_classes", "scores", "pred_masks", "pred_keypoints"
         """
-        if not self.training:
+        if not self.training and not calculate_loss:
             return self.inference(batched_inputs)
-        
         images = self.preprocess_image(batched_inputs)
         features, res = self.backbone(images.tensor)
         gt_instances = []
         selected_idx = []
-        domain_label = []
+        domain_label_list = []
         for batch_idx, x in enumerate(batched_inputs):
             if "instances" in x:
                 gt_instances.append(x["instances"].to(self.device))
                 selected_idx.append(batch_idx)
-                domain_label.append([0])
+                domain_label_list.append([0])
             else:
-                domain_label.append([1])
+                domain_label_list.append([1])
         if len(gt_instances) == 0:
             gt_instances = None
 
-        domain_label = torch.tensor(domain_label).float().to(self.device)
         
         # modified features, filter those from target domain data
         for key in features.keys():
@@ -84,20 +85,27 @@ class customRCNN(GeneralizedRCNN):
         
         batched_inputs = [x for batch_idx, x in enumerate(batched_inputs) if batch_idx in selected_idx]
         del images
+        
         images = self.preprocess_image(batched_inputs)
+        
+        if self.do_domain:
+            if not domain_label:
+                domain_label = torch.tensor(domain_label_list).float().to(self.device)
+            else:
+                domain_label = torch.tensor(domain_label).float().to(self.device)
 
-        loss_res3 = self.discriminatorRes3(res["res3"], domain_label, alpha3)
-        loss_res4 = self.discriminatorRes4(res["res4"], domain_label, alpha4)
-        loss_res5 = self.discriminatorRes5(res["res5"], domain_label, alpha5)
+            loss_res3 = self.discriminatorRes3(res["res3"], domain_label, alpha3)
+            loss_res4 = self.discriminatorRes4(res["res4"], domain_label, alpha4)
+            loss_res5 = self.discriminatorRes5(res["res5"], domain_label, alpha5)
         
         if self.proposal_generator is not None:
-            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances, calculate_loss)
         else:
             assert "proposals" in batched_inputs[0]
             proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             proposal_losses = {}
 
-        _, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
+        _, detector_losses = self.roi_heads(images, features, proposals, gt_instances, calculate_loss)
         if self.vis_period > 0:
             storage = get_event_storage()
             if storage.iter % self.vis_period == 0:
@@ -106,7 +114,8 @@ class customRCNN(GeneralizedRCNN):
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
-        losses.update({"loss_r3": loss_res3, "loss_r4": loss_res4, "loss_r5": loss_res5})
+        if self.do_domain:
+            losses.update({"loss_r3": loss_res3, "loss_r4": loss_res4, "loss_r5": loss_res5})
 
         return losses
     
