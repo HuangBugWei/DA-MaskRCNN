@@ -46,104 +46,108 @@ from customizedEvalHook import customLossEval, customEvalHook
 
 logger = logging.getLogger("detectron2")
 
-def do_test(cfg, model):
-    if "evaluator" in cfg.dataloader:
-        ret = inference_on_dataset(
-            model, instantiate(cfg.dataloader.test), instantiate(cfg.dataloader.evaluator)
-            # model, instantiate(cfg.dataloader.test), None
-        )
-        # with open(os.path.join(cfg.train.output_dir, "test_target.json"), "a") as f:
-        #     json.dump(ret, f)
-        #     f.write("\n")
-        print_csv_format(ret)
-        return ret
+def do_testing(model, iter, dataloader, evaluator):
+    lastIter = 0
+    try:
+        with open(os.path.join(evaluator.output_dir, f"{evaluator.dataset_name}-ap.json"), "r") as f:
+            lines = f.readlines()
+            lastLog = json.loads(lines[-1].strip())
+            lastIter = int(lastLog["iter"])
+    except:
+        print("target file not found")
 
-def do_source_test(cfg, model):
-    if "evaluator_source" in cfg.dataloader and "test_source" in cfg.dataloader:
-        ret = inference_on_dataset(
-            model, instantiate(cfg.dataloader.test_source), instantiate(cfg.dataloader.evaluator_source)
-        )
-        # with open(os.path.join(cfg.train.output_dir, "test_source.json"), "a") as f:
-        #     json.dump(ret, f)
-        #     f.write("\n")
-        print_csv_format(ret)
-        return ret
+    if lastIter > int(iter):
+        print("skipping since early log has already been recorded")
+        return None
+    ret = inference_on_dataset(
+        model, instantiate(dataloader), instantiate(evaluator)
+    )
+    ret["iter"] = iter
+    with open(os.path.join(evaluator.output_dir, f"{evaluator.dataset_name}-ap.json"), "a") as f:
+        json.dump(ret, f)
+        f.write("\n")
+    print_csv_format(ret)
+    return ret
 
-def do_validation_loss(cfg, model):
-    if "test_source" in cfg.dataloader:
-        losses = customLossEval(model, instantiate(cfg.dataloader.test_source), domainSource=True)
-        with open(os.path.join(cfg.train.output_dir, "test_source.json"), "a") as f:
-            json.dump(losses, f)
-            f.write("\n")
-    # if "test" in cfg.dataloader:
-    #     losses = customLossEval(model, instantiate(cfg.dataloader.test), domainSource=False)
-    #     with open(os.path.join(cfg.train.output_dir, "test_target.json"), "a") as f:
-    #         json.dump(losses, f)
-    #         f.write("\n")
-
-
-def main(args):
-    cfg = LazyConfig.load(args.config_file)
-    cfg = LazyConfig.apply_overrides(cfg, args.opts)
-
-
-    DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-dataset", txt=False))
-    DatasetCatalog.register('steel_test_source', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt=True))
-    # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("./rebar-revit-auto-dataset/files-200.txt", txt=True))
-    
-    MetadataCatalog.get("steel_test").set(thing_classes=['intersection', 'spacing'])
-    MetadataCatalog.get("steel_test_source").set(thing_classes=['intersection', 'spacing'])
-    
-    
-    cfg.model.roi_heads.num_classes = 2
-    
-
-    cfg.dataloader.test = LazyCall(build_detection_test_loader)(
-                            dataset=LazyCall(get_detection_dataset_dicts)(names="steel_test", filter_empty=False),
+def build_loader_and_evaluator(cfg, dataset_name):
+    return LazyCall(build_detection_test_loader)(
+                            dataset=LazyCall(get_detection_dataset_dicts)(names=dataset_name, filter_empty=False),
                             mapper=LazyCall(DatasetMapper)(
                                 is_train=False,
                                 augmentations=[
                                     LazyCall(T.ResizeShortestEdge)(short_edge_length=800, max_size=1333),
                                 ],
-                                image_format="${...train.mapper.image_format}",
+                                image_format="BGR",
                             ),
                             num_workers=4,
-                            )
-    cfg.dataloader.test_source = LazyCall(build_detection_test_loader)(
-                            dataset=LazyCall(get_detection_dataset_dicts)(names="steel_test_source", filter_empty=False),
-                            mapper=LazyCall(DatasetMapper)(
-                                is_train=True,
-                                # use_instance_mask=True,
-                                augmentations=[
-                                    LazyCall(T.ResizeShortestEdge)(short_edge_length=800, max_size=1333),
-                                ],
-                                image_format="${...train.mapper.image_format}",
-                            ),
-                            num_workers=4,
-                            )
-    cfg.train.output_dir = "./ablation-no-DA"
-    cfg.dataloader.evaluator = LazyCall(COCOEvaluator)(
-                                    dataset_name="${..test.dataset.names}",
-                                    output_dir=os.path.join(cfg.train.output_dir,
-                                                            "test_target")
+                            ), LazyCall(COCOEvaluator)(
+                                    dataset_name=dataset_name,
+                                    output_dir=os.path.join(cfg.train.output_dir),
+                                    allow_cached_coco=False,
                                 )
-    cfg.dataloader.evaluator_source = LazyCall(COCOEvaluator)(
-                                    dataset_name="${..test_source.dataset.names}",
-                                    output_dir=os.path.join(cfg.train.output_dir,
-                                                            "test_source")
-                                )
+# def findValidCkpt(path):
+#     for ckpt in os.listdir(path):
+#         if ckpt.startswith("model") and ckpt.endswith(".pth"):
+
+def main(args):
+    cfg = LazyConfig.load(args.config_file)
+    cfg = LazyConfig.apply_overrides(cfg, args.opts)
+
+    DatasetCatalog.clear()
+    MetadataCatalog.clear()
+    # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/test.txt", txt = True))
+    # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset", txt = False))
+    DatasetCatalog.register('steel_train', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-train.txt", txt = True))
+    DatasetCatalog.register('steel_val', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-val.txt", txt = True))
+    DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-slab.txt", txt = True))
+    DatasetCatalog.register('steel_test_bim', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt = True))
     
-    cfg.train.init_checkpoint = os.path.join(cfg.train.output_dir,
-                                             "model_final.pth")
-    
-    default_setup(cfg, args)
+    MetadataCatalog.get("steel_train").set(thing_classes=['intersection', 'spacing'])
+    MetadataCatalog.get("steel_val").set(thing_classes=['intersection', 'spacing'])
+    MetadataCatalog.get("steel_test").set(thing_classes=['intersection', 'spacing'])
+    MetadataCatalog.get("steel_test_bim").set(thing_classes=['intersection', 'spacing'])
+        
+    cfg.model.roi_heads.num_classes = 2
+    cfg.train.output_dir = "/home/aicenter/DA-MaskRCNN/0619-zinfandel/ablation-DA-25k-061815"
+    cfg.model.roi_heads.box_predictor.test_score_thresh = 0.5
+
+    trainloader, traineval = build_loader_and_evaluator(cfg, "steel_train")
+    valloader, valeval = build_loader_and_evaluator(cfg, "steel_val")
+    testloader, testval = build_loader_and_evaluator(cfg, "steel_test")
+    bimloader, bimeval = build_loader_and_evaluator(cfg, "steel_test_bim")
     
     model = instantiate(cfg.model)
     model.to(cfg.train.device)
-    model = create_ddp_model(model)
-    DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
-    print(do_test(cfg, model))
-    print(do_source_test(cfg, model))
+    # model.to("cpu")
+
+    # default_setup(cfg, args)
+    print(os.listdir(cfg.train.output_dir))
+    for ckpt in sorted(os.listdir(cfg.train.output_dir)):
+        if ckpt.startswith("model") and ckpt.endswith(".pth"):
+            print(f"now loading {ckpt}")
+            iter = os.path.splitext(os.path.basename(ckpt))[0].split("_")[1]
+            if iter == "final":
+                break
+            print(f"now iter {iter}")
+            cfg.train.init_checkpoint = os.path.join(cfg.train.output_dir, ckpt)
+            DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
+            print("train-ap")
+            print(do_testing(model, iter, trainloader, traineval))
+            print("val-ap")
+            print(do_testing(model, iter, valloader, valeval))
+            print("test-ap")
+            print(do_testing(model, iter, testloader, testval))
+            print("bim-ap")
+            print(do_testing(model, iter, bimloader, bimeval))
+    
+    # def do_testing(cfg, model, iter, dataloader, evaluator):
+    # model = instantiate(cfg.model)
+    # # model.to(cfg.train.device)
+    # model.to("cpu")
+    # # model = create_ddp_model(model)
+    # DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
+    # print(do_test(cfg, model))
+    # # print(do_source_test(cfg, model))
     
 
 
