@@ -56,7 +56,7 @@ def do_testing(model, iter, dataloader, evaluator):
     except:
         print("target file not found")
 
-    if lastIter > int(iter):
+    if lastIter >= int(iter):
         print("skipping since early log has already been recorded")
         return None
     ret = inference_on_dataset(
@@ -85,9 +85,6 @@ def build_loader_and_evaluator(cfg, dataset_name):
                                     output_dir=os.path.join(cfg.train.output_dir),
                                     allow_cached_coco=False,
                                 )
-# def findValidCkpt(path):
-#     for ckpt in os.listdir(path):
-#         if ckpt.startswith("model") and ckpt.endswith(".pth"):
 
 def main(args):
     cfg = LazyConfig.load(args.config_file)
@@ -140,16 +137,6 @@ def main(args):
             print("bim-ap")
             print(do_testing(model, iter, bimloader, bimeval))
     
-    # def do_testing(cfg, model, iter, dataloader, evaluator):
-    # model = instantiate(cfg.model)
-    # # model.to(cfg.train.device)
-    # model.to("cpu")
-    # # model = create_ddp_model(model)
-    # DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
-    # print(do_test(cfg, model))
-    # # print(do_source_test(cfg, model))
-    
-
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
