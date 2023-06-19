@@ -46,7 +46,7 @@ from customizedEvalHook import customLossEval, customEvalHook
 
 from sklearn.manifold import TSNE
 from matplotlib import pyplot as plt
-import collections, time
+import collections, time, copy
 
 def do_tsne(cfg, model, dataloader1, dataloader2, suffix):
     model.eval()
@@ -55,13 +55,13 @@ def do_tsne(cfg, model, dataloader1, dataloader2, suffix):
         res4 = []
         res5 = []
         
-        start = time.time()
-        for idx, (batch1, batch2) in enumerate(zip(instantiate(dataloader1), instantiate(dataloader2))):
-            print(f"instantiate dataloader time {time.time() - start} s")
+        
+        for idx, (batch1, batch2) in enumerate(zip(dataloader1, dataloader2)):
+            
             start = time.time()
-            # if idx == 0:
-            #     print(batch1[0]["file_name"])
-            #     print(batch2[0]["file_name"])
+            if idx == 0:
+                print(batch1[0]["file_name"])
+                print(batch2[0]["file_name"])
     
             # print("---------------size---------------")
             # print(batch1[0]["image"].size())
@@ -74,30 +74,22 @@ def do_tsne(cfg, model, dataloader1, dataloader2, suffix):
             # print(images.tensor.size())
             # break
 
-
             images = model.preprocess_image(batch1 + batch2)
-            print(f"load file time {time.time() - start} s")
-
-            start = time.time()
             features, res = model.backbone(images.tensor)
-            print(f"pass model time {time.time() - start} s")
             
-            start = time.time()
-
             res3.append(res["res3"].cpu().detach())
             res4.append(res["res4"].cpu().detach())
             res5.append(res["res5"].cpu().detach())
-            
-            if len(res3) * 16 > 2000:
+            del res["res3"]
+            del res["res4"]
+            del res["res5"]
+
+            if len(res3) * 16 > 600:
                 break
-                
-            print(f"concatenate time {time.time() - start} s")
-        
-        start = time.time()
-        res3 = torch.cat(res3, axis = 0).cpu().detach().numpy()
-        res4 = torch.cat(res4, axis = 0).cpu().detach().numpy()
-        res5 = torch.cat(res5, axis = 0).cpu().detach().numpy()
-        print(f"actuall concatenate time {time.time() - start} s")
+
+        res3 = torch.cat(res3, axis = 0).numpy()
+        res4 = torch.cat(res4, axis = 0).numpy()
+        res5 = torch.cat(res5, axis = 0).numpy()
         
         print("-------------------")
         print(res3.shape)
@@ -227,14 +219,17 @@ def main(args):
     model.to(cfg.train.device)
     # model = create_ddp_model(model)
     # DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
+    start = time.time()
+    dataloader1, dataloader2 = instantiate(cfg.dataloader.test_source), instantiate(cfg.dataloader.test)
+    print(f"instantiate dataloader time {time.time() - start} s")
     if args.model is not None:
         iter = os.path.splitext(os.path.basename(args.model))[0].split("_")[1]
         cfg.train.init_checkpoint = os.path.join(cfg.train.output_dir, args.model)
         DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
         print(do_tsne(cfg, 
                         model, 
-                        cfg.dataloader.test_source, 
-                        cfg.dataloader.test,
+                        copy.deepcopy(dataloader1),
+                        copy.deepcopy(dataloader2),
                         f"-{args.suffix}-{iter}"))
         return
 
@@ -247,10 +242,12 @@ def main(args):
             print(f"now iter {iter}")
             cfg.train.init_checkpoint = os.path.join(cfg.train.output_dir, ckpt)
             DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
-            print(do_tsne(cfg, 
+            print(do_tsne(cfg,
                           model, 
-                          cfg.dataloader.test_source, 
-                          cfg.dataloader.test,
+                        #   cfg.dataloader.test_source, 
+                        #   cfg.dataloader.test,
+                          copy.deepcopy(dataloader1),
+                          copy.deepcopy(dataloader2),
                           f"-{args.suffix}-{iter}"))
 
     
