@@ -46,19 +46,26 @@ from customizedEvalHook import customLossEval, customEvalHook
 
 from sklearn.manifold import TSNE
 from matplotlib import pyplot as plt
-import collections
+import collections, time
 
 def do_tsne(cfg, model, dataloader1, dataloader2, suffix):
     model.eval()
     with torch.no_grad():
-        res3 = None
-        res4 = None
-        res5 = None
+        res3 = []
+        res4 = []
+        res5 = []
         
+        start = time.time()
         for idx, (batch1, batch2) in enumerate(zip(instantiate(dataloader1), instantiate(dataloader2))):
-            print("---------------size---------------")
-            print(batch1[0]["image"].size())
-            print(batch2[0]["image"].size())
+            print(f"instantiate dataloader time {time.time() - start} s")
+            start = time.time()
+            # if idx == 0:
+            #     print(batch1[0]["file_name"])
+            #     print(batch2[0]["file_name"])
+    
+            # print("---------------size---------------")
+            # print(batch1[0]["image"].size())
+            # print(batch2[0]["image"].size())
             # images1 = model.preprocess_image(batch1)
             # images2 = model.preprocess_image(batch2)
             # print(images1.tensor.size())
@@ -69,27 +76,28 @@ def do_tsne(cfg, model, dataloader1, dataloader2, suffix):
 
 
             images = model.preprocess_image(batch1 + batch2)
-            print(images.tensor.size())
-            features, res = model.backbone(images.tensor)
-            
-            # print(res["res3"].size())
-            if res3 is not None:
-                res3 = np.concatenate((res3, res["res3"].cpu().detach().numpy()), axis=0)
-            else:
-                res3 = res["res3"].cpu().detach().numpy()
-            
-            if res4 is not None:
-                res4 = np.concatenate((res4, res["res4"].cpu().detach().numpy()), axis=0)
-            else:
-                res4 = res["res4"].cpu().detach().numpy()
+            print(f"load file time {time.time() - start} s")
 
-            if res5 is not None:
-                res5 = np.concatenate((res5, res["res5"].cpu().detach().numpy()), axis=0)
-            else:
-                res5 = res["res5"].cpu().detach().numpy()
+            start = time.time()
+            features, res = model.backbone(images.tensor)
+            print(f"pass model time {time.time() - start} s")
             
-            if res3.shape[0] > 350:
+            start = time.time()
+
+            res3.append(res["res3"].cpu().detach())
+            res4.append(res["res4"].cpu().detach())
+            res5.append(res["res5"].cpu().detach())
+            
+            if len(res3) * 16 > 2000:
                 break
+                
+            print(f"concatenate time {time.time() - start} s")
+        
+        start = time.time()
+        res3 = torch.cat(res3, axis = 0).cpu().detach().numpy()
+        res4 = torch.cat(res4, axis = 0).cpu().detach().numpy()
+        res5 = torch.cat(res5, axis = 0).cpu().detach().numpy()
+        print(f"actuall concatenate time {time.time() - start} s")
         
         print("-------------------")
         print(res3.shape)
@@ -165,10 +173,10 @@ def main(args):
     DatasetCatalog.clear()
     MetadataCatalog.clear()
 
-    # DatasetCatalog.register('steel_test', lambda : get_no_label_dicts("/home/aicenter/maskrcnn/rebar-target-dataset/imgs"))
-    # DatasetCatalog.register('steel_test_source', lambda : get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/files-24826.txt", txt=True))
-    DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-dataset", txt=False))
-    DatasetCatalog.register('steel_test_source', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt=True))
+    DatasetCatalog.register('steel_test', lambda : get_no_label_dicts("/home/aicenter/maskrcnn/rebar-target-dataset/imgs"))
+    DatasetCatalog.register('steel_test_source', lambda : get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/files-24826.txt", txt=True))
+    # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-dataset", txt=False))
+    # DatasetCatalog.register('steel_test_source', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt=True))
     
     MetadataCatalog.get("steel_test").set(thing_classes=['intersection', 'spacing'])
     MetadataCatalog.get("steel_test_source").set(thing_classes=['intersection', 'spacing'])
