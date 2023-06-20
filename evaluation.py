@@ -41,15 +41,15 @@ from detectron2.data import (
 )
 from utils import get_rebar_dicts, get_no_label_dicts
 from customizedTrainer import customAMPTrainer, customSimpleTrainer
-import torch
+import torch, argparse, copy, time
 from customizedEvalHook import customLossEval, customEvalHook
 
 logger = logging.getLogger("detectron2")
 
-def do_testing(model, iter, dataloader, evaluator):
+def do_testing(cfg, model, iter, dataloader, evaluator, dataset_name):
     lastIter = 0
     try:
-        with open(os.path.join(evaluator.output_dir, f"{evaluator.dataset_name}-ap.json"), "r") as f:
+        with open(os.path.join(cfg.train.output_dir, f"{dataset_name}-ap.json"), "r") as f:
             lines = f.readlines()
             lastLog = json.loads(lines[-1].strip())
             lastIter = int(lastLog["iter"])
@@ -59,18 +59,17 @@ def do_testing(model, iter, dataloader, evaluator):
     if lastIter >= int(iter):
         print("skipping since early log has already been recorded")
         return None
-    ret = inference_on_dataset(
-        model, instantiate(dataloader), instantiate(evaluator)
-    )
+    ret = inference_on_dataset(model, dataloader, evaluator)
+
     ret["iter"] = iter
-    with open(os.path.join(evaluator.output_dir, f"{evaluator.dataset_name}-ap.json"), "a") as f:
+    with open(os.path.join(cfg.train.output_dir, f"{dataset_name}-ap.json"), "a") as f:
         json.dump(ret, f)
         f.write("\n")
     print_csv_format(ret)
     return ret
 
 def build_loader_and_evaluator(cfg, dataset_name):
-    return LazyCall(build_detection_test_loader)(
+    return instantiate(LazyCall(build_detection_test_loader)(
                             dataset=LazyCall(get_detection_dataset_dicts)(names=dataset_name, filter_empty=False),
                             mapper=LazyCall(DatasetMapper)(
                                 is_train=False,
@@ -80,45 +79,49 @@ def build_loader_and_evaluator(cfg, dataset_name):
                                 image_format="BGR",
                             ),
                             num_workers=4,
-                            ), LazyCall(COCOEvaluator)(
+                            )), instantiate(LazyCall(COCOEvaluator)(
                                     dataset_name=dataset_name,
                                     output_dir=os.path.join(cfg.train.output_dir),
                                     allow_cached_coco=False,
-                                )
+                                ))
 
 def main(args):
     cfg = LazyConfig.load(args.config_file)
-    cfg = LazyConfig.apply_overrides(cfg, args.opts)
+    # cfg = LazyConfig.apply_overrides(cfg, args.opts)
 
     DatasetCatalog.clear()
     MetadataCatalog.clear()
     # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/test.txt", txt = True))
     # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset", txt = False))
-    DatasetCatalog.register('steel_train', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-train.txt", txt = True))
-    DatasetCatalog.register('steel_val', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-val.txt", txt = True))
-    DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-slab.txt", txt = True))
-    DatasetCatalog.register('steel_test_bim', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt = True))
+    if args.train:
+        DatasetCatalog.register('steel_train', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-train.txt", txt = True))
+        MetadataCatalog.get("steel_train").set(thing_classes=['intersection', 'spacing'])
+        trainloader, traineval = build_loader_and_evaluator(cfg, "steel_train")
     
-    MetadataCatalog.get("steel_train").set(thing_classes=['intersection', 'spacing'])
+    DatasetCatalog.register('steel_val', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-val.txt", txt = True))
     MetadataCatalog.get("steel_val").set(thing_classes=['intersection', 'spacing'])
+    valloader, valeval = build_loader_and_evaluator(cfg, "steel_val")
+
+    DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-labeled-test-dataset/target-slab.txt", txt = True))
     MetadataCatalog.get("steel_test").set(thing_classes=['intersection', 'spacing'])
-    MetadataCatalog.get("steel_test_bim").set(thing_classes=['intersection', 'spacing'])
+    testloader, testval = build_loader_and_evaluator(cfg, "steel_test")
+    
+    if args.bim:
+        DatasetCatalog.register('steel_test_bim', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt = True))
+        MetadataCatalog.get("steel_test_bim").set(thing_classes=['intersection', 'spacing'])
+        bimloader, bimeval = build_loader_and_evaluator(cfg, "steel_test_bim")
+    
         
     cfg.model.roi_heads.num_classes = 2
-    cfg.train.output_dir = "/home/aicenter/DA-MaskRCNN/0619-zinfandel/ablation-DA-25k-061815"
+    cfg.train.output_dir = args.input
     cfg.model.roi_heads.box_predictor.test_score_thresh = 0.5
-
-    trainloader, traineval = build_loader_and_evaluator(cfg, "steel_train")
-    valloader, valeval = build_loader_and_evaluator(cfg, "steel_val")
-    testloader, testval = build_loader_and_evaluator(cfg, "steel_test")
-    bimloader, bimeval = build_loader_and_evaluator(cfg, "steel_test_bim")
     
     model = instantiate(cfg.model)
     model.to(cfg.train.device)
     # model.to("cpu")
 
     # default_setup(cfg, args)
-    print(os.listdir(cfg.train.output_dir))
+    
     for ckpt in sorted(os.listdir(cfg.train.output_dir)):
         if ckpt.startswith("model") and ckpt.endswith(".pth"):
             print(f"now loading {ckpt}")
@@ -128,23 +131,38 @@ def main(args):
             print(f"now iter {iter}")
             cfg.train.init_checkpoint = os.path.join(cfg.train.output_dir, ckpt)
             DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
-            print("train-ap")
-            print(do_testing(model, iter, trainloader, traineval))
+            if args.train:
+                print("train-ap")
+                print(do_testing(cfg, model, iter, trainloader, traineval, "steel_train"))
             print("val-ap")
-            print(do_testing(model, iter, valloader, valeval))
+            print(do_testing(cfg, model, iter, copy.deepcopy(valloader), copy.deepcopy(valeval), "steel_val"))
             print("test-ap")
-            print(do_testing(model, iter, testloader, testval))
-            print("bim-ap")
-            print(do_testing(model, iter, bimloader, bimeval))
+            print(do_testing(cfg, model, iter, copy.deepcopy(testloader), copy.deepcopy(testval), "steel_test"))
+            if args.bim:
+                print("bim-ap")
+                print(do_testing(cfg, model, iter, copy.deepcopy(bimloader), copy.deepcopy(bimeval), "steel_test_bim"))
     
+def parser():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-i", "--input", type = str, required = True)
+    parser.add_argument("-t", "--train", action='store_true')
+    parser.add_argument("-b", "--bim", action='store_true')
+    parser.add_argument("--num-gpus", type = int, default = 1)
+    parser.add_argument("--config-file", required = True, metavar="FILE", help="path to config file")
+
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    args = default_argument_parser().parse_args()
+    # args = default_argument_parser().parse_args()
+    args = parser()
+    start = time.time()
     launch(
         main,
         args.num_gpus,
-        num_machines=args.num_machines,
-        machine_rank=args.machine_rank,
-        dist_url=args.dist_url,
+        # num_machines=args.num_machines,
+        # machine_rank=args.machine_rank,
+        # dist_url=args.dist_url,
         args=(args,),
     )
+    print(f"total time {time.time() - start} s")
