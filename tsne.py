@@ -40,41 +40,66 @@ from detectron2.data import (
     get_detection_dataset_dicts,
 )
 from utils import get_rebar_dicts, get_no_label_dicts
-from customizedTrainer import customAMPTrainer, customSimpleTrainer
 import torch
-from customizedEvalHook import customLossEval, customEvalHook
 
 from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 from matplotlib import pyplot as plt
 import collections, time, copy
 
-def do_tsne(cfg, model, dataloader1, dataloader2, suffix):
+def do_tsne(x):
+    result = TSNE(n_components=2, 
+                 perplexity=50,
+                 learning_rate="auto",
+                 n_iter=500,
+                 init="pca",
+                 ).fit_transform(x)
+    return result
+
+def do_pca(x):
+    result = PCA(n_components=2).fit_transform(x)
+    return result
+
+def do_analyze(cfg, model, dataloader1, dataloader2, suffix, pca=False):
+    
     model.eval()
     with torch.no_grad():
         res3 = []
         res4 = []
         res5 = []
         
-        
-        for idx, (batch1, batch2) in enumerate(zip(dataloader1, dataloader2)):
+        # for idx, (batch1, batch2) in enumerate(zip(dataloader1, dataloader2)):
             
-            start = time.time()
-            if idx == 0:
-                print(batch1[0]["file_name"])
-                print(batch2[0]["file_name"])
+        #     if idx == 0:
+        #         print(batch1[0]["file_name"])
+        #         print(batch2[0]["file_name"])
     
-            # print("---------------size---------------")
-            # print(batch1[0]["image"].size())
-            # print(batch2[0]["image"].size())
-            # images1 = model.preprocess_image(batch1)
-            # images2 = model.preprocess_image(batch2)
-            # print(images1.tensor.size())
-            # print(images2.tensor.size())
-            # images = model.preprocess_image(batch1 + batch2)
-            # print(images.tensor.size())
-            # break
+        #     # print("---------------size---------------")
+        #     # print(batch1[0]["image"].size())
+        #     # print(batch2[0]["image"].size())
+        #     # images1 = model.preprocess_image(batch1)
+        #     # images2 = model.preprocess_image(batch2)
+        #     # print(images1.tensor.size())
+        #     # print(images2.tensor.size())
+        #     # images = model.preprocess_image(batch1 + batch2)
+        #     # print(images.tensor.size())
+        #     # break
 
-            images = model.preprocess_image(batch1 + batch2)
+        #     images = model.preprocess_image(batch1 + batch2)
+        #     features, res = model.backbone(images.tensor)
+            
+        #     res3.append(res["res3"].cpu().detach())
+        #     res4.append(res["res4"].cpu().detach())
+        #     res5.append(res["res5"].cpu().detach())
+        #     del res["res3"]
+        #     del res["res4"]
+        #     del res["res5"]
+
+        #     if len(res3) * 16 > 1000:
+        #         break
+        
+        for idx, batch1 in enumerate(dataloader1):
+            images = model.preprocess_image(batch1)
             features, res = model.backbone(images.tensor)
             
             res3.append(res["res3"].cpu().detach())
@@ -84,9 +109,23 @@ def do_tsne(cfg, model, dataloader1, dataloader2, suffix):
             del res["res4"]
             del res["res5"]
 
-            if len(res3) * 16 > 600:
-                break
+            # if idx * 8 > 20:
+            #     break
+        
+        for idx, batch2 in enumerate(dataloader2):
+            images = model.preprocess_image(batch2)
+            features, res = model.backbone(images.tensor)
+            
+            res3.append(res["res3"].cpu().detach())
+            res4.append(res["res4"].cpu().detach())
+            res5.append(res["res5"].cpu().detach())
+            del res["res3"]
+            del res["res4"]
+            del res["res5"]
 
+            # if idx * 8 > 20:
+            #     break
+        
         res3 = torch.cat(res3, axis = 0).numpy()
         res4 = torch.cat(res4, axis = 0).numpy()
         res5 = torch.cat(res5, axis = 0).numpy()
@@ -104,58 +143,71 @@ def do_tsne(cfg, model, dataloader1, dataloader2, suffix):
     print(res4.shape)
     print(res5.shape)
 
-    tsne3 = TSNE(n_components=2, perplexity = 30).fit_transform(res3)
-    tsne4 = TSNE(n_components=2, perplexity = 30).fit_transform(res4)
-    tsne5 = TSNE(n_components=2, perplexity = 30).fit_transform(res5)
+    if pca:
+        ret3 = do_pca(res3)
+        ret4 = do_pca(res4)
+        ret5 = do_pca(res5)
+    else:
+        ret3 = do_tsne(res3)
+        ret4 = do_tsne(res4)
+        ret5 = do_tsne(res5)
 
-    print(tsne3.shape)
-    print(tsne4.shape)
-    print(tsne5.shape)
+    print(ret3.shape)
+    print(ret4.shape)
+    print(ret5.shape)
+    half_idx = ret3.shape[0] // 2
+    plt.figure(figsize=(5, 5))
 
-    plt.figure(figsize=(10,10))
-
-    for i in np.arange(len(tsne3)):
-        if (i // 8) % 2:
-            c = "b"
-            label = "target"
-        else:
-            c = "y"
-            label = "source"
-        x, y = (tsne3[i,0],tsne3[i,1])
-        plt.scatter(x,y,c = c, label=label)
-    # plt.legend()
-    plt.title(f"tSNE-res3-{suffix}")
-    plt.savefig(os.path.join(cfg.train.output_dir, f"tSNE-res3-{suffix}.png"))
+    # for i in np.arange(len(ret3)):
+    #     if (i // 8) % 2:
+    #         c = "b"
+    #         label = "target"
+    #     else:
+    #         c = "y"
+    #         label = "source"
+    #     x, y = (ret3[i,0],ret3[i,1])
+    #     plt.scatter(x, y, c=c, label=label)
+    
+    plt.scatter(ret3[:half_idx, 0], ret3[:half_idx, 1], c="blue",
+                alpha=0.8, edgecolors='none', label="source")
+    plt.scatter(ret3[half_idx:, 0], ret3[half_idx:, 1], c="green",
+                alpha=0.8, edgecolors='none', label="target")
+    plt.legend()
+    plt.axis("off")
+    if pca:
+        plt.title(f"PCA-res3-{suffix}")
+        plt.savefig(os.path.join(cfg.train.output_dir, f"PCA-res3-{suffix}.png"))
+    else:
+        plt.title(f"tSNE-res3-{suffix}")
+        plt.savefig(os.path.join(cfg.train.output_dir, f"tSNE-res3-{suffix}.png"))
     plt.clf()
 
-    # plt.figure(figsize=(10,10))
-    for i in np.arange(len(tsne4)):
-        if (i // 8) % 2:
-            c = "b"
-            label = "target"
-        else:
-            c = "y"
-            label = "source"
-        x, y = (tsne4[i,0],tsne4[i,1])
-        plt.scatter(x,y,c = c, label=label)
-    # plt.legend()
-    plt.title(f"tSNE-res4-{suffix}")
-    plt.savefig(os.path.join(cfg.train.output_dir, f"tSNE-res4-{suffix}.png"))
+    plt.scatter(ret4[:half_idx, 0], ret4[:half_idx, 1], c="blue",
+                alpha=0.8, edgecolors='none', label="source")
+    plt.scatter(ret4[half_idx:, 0], ret4[half_idx:, 1], c="green",
+                alpha=0.8, edgecolors='none', label="target")
+    plt.legend()
+    plt.axis("off")
+    if pca:
+        plt.title(f"PCA-res4-{suffix}")
+        plt.savefig(os.path.join(cfg.train.output_dir, f"PCA-res4-{suffix}.png"))
+    else:
+        plt.title(f"tSNE-res4-{suffix}")
+        plt.savefig(os.path.join(cfg.train.output_dir, f"tSNE-res4-{suffix}.png"))
     plt.clf()
 
-    # plt.figure(figsize=(10,10))
-    for i in np.arange(len(tsne5)):
-        if (i // 8) % 2:
-            c = "b"
-            label = "target"
-        else:
-            c = "y"
-            label = "source"
-        x, y = (tsne5[i,0],tsne5[i,1])
-        plt.scatter(x,y,c = c, label=label)
-    # plt.legend()
-    plt.title(f"tSNE-res5-{suffix}")
-    plt.savefig(os.path.join(cfg.train.output_dir, f"tSNE-res5-{suffix}.png"))
+    plt.scatter(ret5[:half_idx, 0], ret5[:half_idx, 1], c="blue",
+                alpha=0.8, edgecolors='none', label="source")
+    plt.scatter(ret5[half_idx:, 0], ret5[half_idx:, 1], c="green",
+                alpha=0.8, edgecolors='none', label="target")
+    plt.legend()
+    plt.axis("off")
+    if pca:
+        plt.title(f"PCA-res5-{suffix}")
+        plt.savefig(os.path.join(cfg.train.output_dir, f"PCA-res5-{suffix}.png"))
+    else:
+        plt.title(f"tSNE-res5-{suffix}")
+        plt.savefig(os.path.join(cfg.train.output_dir, f"tSNE-res5-{suffix}.png"))
     plt.clf()
 
 def main(args):
@@ -165,8 +217,8 @@ def main(args):
     DatasetCatalog.clear()
     MetadataCatalog.clear()
 
-    DatasetCatalog.register('steel_test', lambda : get_no_label_dicts("/home/aicenter/maskrcnn/rebar-target-dataset/imgs"))
-    DatasetCatalog.register('steel_test_source', lambda : get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/files-24826.txt", txt=True))
+    DatasetCatalog.register('steel_test', lambda : get_no_label_dicts("/home/aicenter/maskrcnn/rebar-target-dataset/feature-analysis.txt", txt=True))
+    DatasetCatalog.register('steel_test_source', lambda : get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/feature-analysis.txt", txt=True))
     # DatasetCatalog.register('steel_test', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-dataset", txt=False))
     # DatasetCatalog.register('steel_test_source', lambda :  get_rebar_dicts("/home/aicenter/maskrcnn/rebar-revit-auto-dataset/rebar-revit-auto-test.txt", txt=True))
     
@@ -209,14 +261,24 @@ def main(args):
                             num_workers = 4,
                             )
     
-    dataloader_dict = collections.defaultdict(list)
-    dataloader_dict["source"].append(cfg.dataloader.test_source)
-    dataloader_dict["target"].append(cfg.dataloader.test)
+    # dataloader_dict = collections.defaultdict(list)
+    # dataloader_dict["source"].append(cfg.dataloader.test_source)
+    # dataloader_dict["target"].append(cfg.dataloader.test)
 
     # cfg.train.init_checkpoint = "/home/aicenter/DA-MaskRCNN/ablation-DA-25k/model_final.pth"
     # # default_setup(cfg, args)
+    if args.num_gpus > 1:
+        cfg.model.backbone.bottom_up.stem.norm = \
+        cfg.model.backbone.bottom_up.stages.norm = "SyncBN"
+        cfg.model.backbone.norm = "SyncBN"
+    else:
+        cfg.model.backbone.bottom_up.stem.norm = \
+        cfg.model.backbone.bottom_up.stages.norm = "BN"
+        cfg.model.backbone.norm = "BN"
+    
     model = instantiate(cfg.model)
     model.to(cfg.train.device)
+    
     # model = create_ddp_model(model)
     # DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
     start = time.time()
@@ -226,11 +288,15 @@ def main(args):
         iter = os.path.splitext(os.path.basename(args.model))[0].split("_")[1]
         cfg.train.init_checkpoint = os.path.join(cfg.train.output_dir, args.model)
         DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
-        print(do_tsne(cfg, 
+        start = time.time()
+        print(do_analyze(cfg,
                         model, 
                         copy.deepcopy(dataloader1),
                         copy.deepcopy(dataloader2),
-                        f"-{args.suffix}-{iter}"))
+                        f"-{args.suffix}-{iter}",
+                        args.pca),
+                        )
+        print(f"process time {time.time() - start} s")
         return
 
     for ckpt in sorted(os.listdir(cfg.train.output_dir)):
@@ -242,14 +308,15 @@ def main(args):
             print(f"now iter {iter}")
             cfg.train.init_checkpoint = os.path.join(cfg.train.output_dir, ckpt)
             DetectionCheckpointer(model).load(cfg.train.init_checkpoint)
-            print(do_tsne(cfg,
-                          model, 
-                        #   cfg.dataloader.test_source, 
-                        #   cfg.dataloader.test,
+            start = time.time()
+            print(do_analyze(cfg,
+                          model,
                           copy.deepcopy(dataloader1),
                           copy.deepcopy(dataloader2),
-                          f"-{args.suffix}-{iter}"))
-
+                          f"-{args.suffix}-{iter}",
+                          args.pca),
+                          )
+            print(f"process time {time.time() - start} s")
     
 def parser():
     parser = argparse.ArgumentParser()
@@ -257,15 +324,18 @@ def parser():
     parser.add_argument("-i", "--input", type = str, required = True)
     parser.add_argument("-m", "--model", type = str)
     parser.add_argument("-s", "--suffix", type = str, required = True)
-    # parser.add_argument("--thres", type = float, default = 0.5)
+    parser.add_argument("--pca", action='store_true', help="if use this flag, use pca to analyze, else use tSNE.")
+    parser.add_argument("--num-gpus", type = int, default = 1)
     parser.add_argument("--config-file", required = True, metavar="FILE", help="path to config file")
 
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parser()
-    # print(args.model is not None)
+    # print(args.pca)
+    start = time.time()
     main(args)
+    print(f"total time {time.time() - start} s")
     # args = default_argument_parser().parse_args()
     
     # launch(
