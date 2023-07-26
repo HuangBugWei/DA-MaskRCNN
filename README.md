@@ -1,7 +1,5 @@
 # DA-MaskRCNN
 domain adaptation on mask rcnn using detectron2 framework
-# NOTICE:
-I've modified gemini original resnet, anchor_generator ("/home/aicenter/pyven/pytorch/lib/python3.8/site-packages/detectron2/modeling") for torchscripting.
 
 ### train
 ```bash
