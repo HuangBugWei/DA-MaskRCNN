@@ -1,6 +1,12 @@
 # DA-MaskRCNN
 domain adaptation on mask rcnn using detectron2 framework
 
+## notice: modified source code
+torch.functional
+return _VF.meshgrid(tensors, **kwargs, indexing='ij')  # type: ignore[attr-defined]
+original is
+return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+
 ### train
 ```bash
 python3 customized-train.py --resume --num-gpus 2 --config-file ./da-maskrcnn-fpn-config.py
