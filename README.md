@@ -1,11 +1,8 @@
 # DA-MaskRCNN
 domain adaptation on mask rcnn using detectron2 framework
 
-## notice: modified source code
-torch.functional
-return _VF.meshgrid(tensors, **kwargs, indexing='ij')  # type: ignore[attr-defined]  
-original is  
-return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+## note: export use torchscript
+https://github.com/facebookresearch/detectron2/issues/3979#issue-1141200469
 
 ### train
 ```bash
