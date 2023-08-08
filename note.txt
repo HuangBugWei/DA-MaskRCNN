@@ -1,0 +1,34 @@
+python3 customized-train.py --num-gpus 2 --config-file ./da-maskrcnn-fpn-config.py && \
+python3 customized-train.py --num-gpus 2 --config-file ./maskrcnn-fpn-config.py && \
+python3 customized-train.py --num-gpus 2 --config-file ./target-maskrcnn-fpn-config.py
+python3 customized-train.py --num-gpus 2 --config-file ./transfer-maskrcnn-fpn-config.py
+
+python3 visualize_json_results.py --input $a --output $a
+
+
+for a in ~/maskrcnn/rebar*-output; do
+    echo $a
+    python3 evaluation.py -i ./rebar-dataset/ --model $a/model_0019999.pth -o $a
+    python3 visualize_json_results.py --input $a --output $a
+done
+
+python3 inference.py --model ./ablation-DA-25k/model_0013999.pth --config-file da-maskrcnn-fpn-config.py --input /home/aicenter/maskrcnn/rebar-target-dataset/ --output ./ablation-DA-25k/0013999-3 --thres 0.5 && 
+python3 inference.py --model ./ablation-no-DA-25k/model_0013999.pth --config-file maskrcnn-fpn-config.py --input /home/aicenter/maskrcnn/rebar-target-dataset/imgs/ --output ./ablation-no-DA-25k/0013999-3 --thres 0.5 && 
+python3 inference.py --model ./ablation-vanilla-235/model_0033999.pth --config-file target-maskrcnn-fpn-config.py --input /home/aicenter/maskrcnn/rebar-target-dataset/imgs/ --output ./ablation-vanilla-235/0033999-3 --thres 0.5
+
+# should modified train.output_dir in file
+python3 evaluation.py --config-file da-maskrcnn-fpn-config.py
+
+
+CUDA_VISIBLE_DEVICES=1 python3 tsne.py -i /home/aicenter/DA-MaskRCNN/ablation-DA-25k -s DA --config-file da-maskrcnn-fpn-config.py && python3 tsne.py -i /home/aicenter/DA-MaskRCNN/ablation-no-DA-25k -s no-DA --config-file maskrcnn-fpn-config.py
+
+python3 self-testing.py && \
+python3 evaluation.py --config-file da-maskrcnn-fpn-config.py -i ./ablation-DA-25k/ && \
+python3 evaluation.py --config-file maskrcnn-fpn-config.py -i ./0619-zinfandel/ablation-no-DA-061909/ && \
+python3 evaluation.py --config-file target-maskrcnn-fpn-config.py -i ./0619-zinfandel/ablation-vanilla-061916/ && \
+python3 tsne.py -i /home/aicenter/DA-MaskRCNN/0619-gemini/ablation-no-DA-25k -s noDA --config-file maskrcnn-fpn-config.py && \
+python3 tsne.py -i ./0619-zinfandel/ablation-no-DA-061909/ -s noDA --config-file maskrcnn-fpn-config.py && \
+python3 tsne.py -i ./0619-zinfandel/ablation-DA-25k-061815/ -s DA --config-file da-maskrcnn-fpn-config.py
+
+
+
