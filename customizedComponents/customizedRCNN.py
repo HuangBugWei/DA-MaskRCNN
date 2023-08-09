@@ -4,7 +4,7 @@ import torch
 from detectron2.modeling.meta_arch import GeneralizedRCNN
 from detectron2.utils.events import get_event_storage
 
-# from discriminator import DiscriminatorRes3, DiscriminatorRes4, DiscriminatorRes5
+# from discriminator import DiscriminatorRes2, DiscriminatorRes3, DiscriminatorRes4, DiscriminatorRes5
 from discriminator import *
 
 

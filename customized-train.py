@@ -44,9 +44,9 @@ from fvcore.common.param_scheduler import MultiStepParamScheduler
 from detectron2.solver import WarmupParamScheduler
 
 from utils import get_rebar_dicts, get_no_label_dicts
-from customizedTrainer import customAMPTrainer, customSimpleTrainer
+from customizedComponents.customizedTrainer import customAMPTrainer, customSimpleTrainer
 # import torch
-from customizedEvalHook import customLossEval, customEvalHook
+from customizedComponents.customizedEvalHook import customLossEval, customEvalHook
 
 logger = logging.getLogger("detectron2")
 
@@ -161,7 +161,7 @@ def main(args):
     cfg = LazyConfig.load(args.config_file)
     cfg = LazyConfig.apply_overrides(cfg, args.opts)
 
-    cfg.train.max_iter = 80000
+    cfg.train.max_iter = 60000
     cfg.train.checkpointer.period = 2000
     cfg.train.eval_period = 10000
     cfg.train.log_period = 20
@@ -179,7 +179,7 @@ def main(args):
             values=[1.0, 0.81, 0.73, 0.65, 0.3, 0.1, 0.01],
             milestones=[25000, 35000, 40000, 65000, 70000, 75000, 80000],
         ),
-        warmup_length= 0.05,
+        warmup_length= 0.1,
         warmup_method="linear",
         warmup_factor=0.001,
     )

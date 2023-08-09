@@ -15,11 +15,11 @@ from detectron2.modeling.roi_heads import (
     FastRCNNConvFCHead,
 )
 
-from customizedFPN import customFPN
-from customizedRPN import customRPN
-from customizedRCNN import customRCNN
-from customizedROIHeads import customROIHeads
-from customizedMaskHead import customMaskHead
+from customizedComponents.customizedFPN import customFPN
+from customizedComponents.customizedRPN import customRPN
+from customizedComponents.customizedRCNN import customRCNN
+from customizedComponents.customizedROIHeads import customROIHeads
+from customizedComponents.customizedMaskHead import customMaskHead
 
 import torch
 
