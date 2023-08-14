@@ -3,20 +3,9 @@ import numpy as np
 
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import LazyConfig, instantiate, LazyCall
-# from detectron2.engine import (
-#     AMPTrainer,
-#     SimpleTrainer,
-#     default_argument_parser,
-#     default_setup,
-#     default_writers,
-#     hooks,
-#     launch,
-# )
 
 from detectron2.data import MetadataCatalog, DatasetCatalog
 import detectron2.data.transforms as T
-# from detectron2.structures import BoxMode
-# from detectron2.evaluation import COCOEvaluator
 
 from detectron2.data import (
     DatasetMapper,

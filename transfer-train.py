@@ -44,9 +44,9 @@ from fvcore.common.param_scheduler import MultiStepParamScheduler
 from detectron2.solver import WarmupParamScheduler
 
 from utils import get_rebar_dicts, get_no_label_dicts
-from customizedTrainer import customAMPTrainer, customSimpleTrainer
+from customizedComponents.customizedTrainer import customAMPTrainer, customSimpleTrainer
 # import torch
-from customizedEvalHook import customLossEval, customEvalHook
+from customizedComponents.customizedEvalHook import customLossEval, customEvalHook
 
 logger = logging.getLogger("detectron2")
 

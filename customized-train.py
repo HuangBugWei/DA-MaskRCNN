@@ -28,18 +28,6 @@ from detectron2.engine.defaults import create_ddp_model
 from detectron2.evaluation import inference_on_dataset, print_csv_format
 from detectron2.utils import comm
 
-# from detectron2.data import MetadataCatalog, DatasetCatalog
-# import detectron2.data.transforms as T
-# from detectron2.structures import BoxMode
-# from detectron2.evaluation import COCOEvaluator
-
-# from detectron2.data import (
-#     DatasetMapper,
-#     build_detection_test_loader,
-#     build_detection_train_loader,
-#     get_detection_dataset_dicts,
-# )
-
 from fvcore.common.param_scheduler import MultiStepParamScheduler
 from detectron2.solver import WarmupParamScheduler
 

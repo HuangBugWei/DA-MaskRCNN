@@ -28,9 +28,9 @@ from detectron2.data import (
     get_detection_dataset_dicts,
 )
 from utils import get_rebar_dicts, get_no_label_dicts
-from customizedTrainer import customAMPTrainer, customSimpleTrainer
+from customizedComponents.customizedTrainer import customAMPTrainer, customSimpleTrainer
 import torch, argparse, copy, time
-from customizedEvalHook import customLossEval, customEvalHook
+from customizedComponents.customizedEvalHook import customLossEval, customEvalHook
 
 logger = logging.getLogger("detectron2")
 
