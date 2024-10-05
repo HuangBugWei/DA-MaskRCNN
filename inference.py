@@ -67,8 +67,8 @@ def draw_result(inputs, outputs, outputPath, metadata):
         basename = os.path.splitext(os.path.basename(input["file_name"]))[0]
         path = os.path.join(outputPath, basename + "-ins.jpg")
         vis.draw_instance_predictions(output["instances"].to("cpu")).save(path)
-        ret = create_binary_mask(output["instances"].pred_masks,
-                                 output["instances"].pred_classes,)
+        ret = create_binary_mask(output["instances"].pred_masks.to("cpu"),
+                                 output["instances"].pred_classes.to("cpu"),)
         path = os.path.join(outputPath, basename + "-seg.jpg")
         draw_seg_result(ret, path)
 
