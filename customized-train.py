@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# Modified from https://github.com/facebookresearch/detectron2/blob/main/tools/lazyconfig_train_net.py
 # Copyright (c) Facebook, Inc. and its affiliates.
 """
 Training script using the new "LazyConfig" python config files.
@@ -10,11 +11,15 @@ few common configuration parameters currently defined in "configs/common/train.p
 To add more complicated training logic, you can easily add other configs
 in the config file and implement a new train_net.py to handle them.
 """
-import logging, os, json, glob
-import numpy as np
 
+import glob
+import json
+import logging
+import os
+
+import numpy as np
 from detectron2.checkpoint import DetectionCheckpointer
-from detectron2.config import LazyConfig, instantiate, LazyCall
+from detectron2.config import LazyCall, LazyConfig, instantiate
 from detectron2.engine import (
     AMPTrainer,
     SimpleTrainer,
@@ -26,44 +31,66 @@ from detectron2.engine import (
 )
 from detectron2.engine.defaults import create_ddp_model
 from detectron2.evaluation import inference_on_dataset, print_csv_format
-from detectron2.utils import comm
-
-from fvcore.common.param_scheduler import MultiStepParamScheduler
 from detectron2.solver import WarmupParamScheduler
+from detectron2.utils import comm
+from fvcore.common.param_scheduler import MultiStepParamScheduler
 
-from utils import get_rebar_dicts, get_no_label_dicts
-from customizedComponents.customizedTrainer import customAMPTrainer, customSimpleTrainer
-# import torch
-from customizedComponents.customizedEvalHook import customLossEval, customEvalHook
+from customizedComponents.customizedEvalHook import (
+    customEvalHook,
+    customLossEval,
+)
+from customizedComponents.customizedTrainer import (
+    customAMPTrainer,
+    customSimpleTrainer,
+)
+from utils import get_no_label_dicts, get_rebar_dicts
 
 logger = logging.getLogger("detectron2")
+
 
 def do_test(cfg, model):
     if "evaluator" in cfg.dataloader:
         ret = inference_on_dataset(
-            model, instantiate(cfg.dataloader.test), instantiate(cfg.dataloader.evaluator)
+            model,
+            instantiate(cfg.dataloader.test),
+            instantiate(cfg.dataloader.evaluator),
         )
-        with open(os.path.join(cfg.train.output_dir, "ap_steel_val.json"), "a") as f:
+        with open(
+            os.path.join(cfg.train.output_dir, "ap_steel_val.json"), "a"
+        ) as f:
             json.dump(ret, f)
             f.write("\n")
         print_csv_format(ret)
         return ret
 
+
 def do_source_test(cfg, model):
-    if "evaluator_source" in cfg.dataloader and "test_source" in cfg.dataloader:
+    if (
+        "evaluator_source" in cfg.dataloader
+        and "test_source" in cfg.dataloader
+    ):
         ret = inference_on_dataset(
-            model, instantiate(cfg.dataloader.test_source), instantiate(cfg.dataloader.evaluator_source)
+            model,
+            instantiate(cfg.dataloader.test_source),
+            instantiate(cfg.dataloader.evaluator_source),
         )
-        with open(os.path.join(cfg.train.output_dir, "ap_steel_test.json"), "a") as f:
+        with open(
+            os.path.join(cfg.train.output_dir, "ap_steel_test.json"), "a"
+        ) as f:
             json.dump(ret, f)
             f.write("\n")
         print_csv_format(ret)
         return ret
+
 
 def do_validation_loss(cfg, model):
     if "test_source" in cfg.dataloader:
-        losses = customLossEval(model, instantiate(cfg.dataloader.test_source), domainSource=True)
-        with open(os.path.join(cfg.train.output_dir, "test_source.json"), "a") as f:
+        losses = customLossEval(
+            model, instantiate(cfg.dataloader.test_source), domainSource=True
+        )
+        with open(
+            os.path.join(cfg.train.output_dir, "test_source.json"), "a"
+        ) as f:
             json.dump(losses, f)
             f.write("\n")
     # if "test" in cfg.dataloader:
@@ -71,6 +98,7 @@ def do_validation_loss(cfg, model):
     #     with open(os.path.join(cfg.train.output_dir, "test_target.json"), "a") as f:
     #         json.dump(losses, f)
     #         f.write("\n")
+
 
 def do_train(args, cfg):
     """
@@ -103,11 +131,10 @@ def do_train(args, cfg):
     train_target_loader = instantiate(cfg.dataloader.train_target)
 
     model = create_ddp_model(model, **cfg.train.ddp)
-    trainer = (customAMPTrainer if cfg.train.amp.enabled else customSimpleTrainer)(model, 
-                                                                       train_loader, 
-                                                                       train_target_loader, 
-                                                                       optim)
-    
+    trainer = (
+        customAMPTrainer if cfg.train.amp.enabled else customSimpleTrainer
+    )(model, train_loader, train_target_loader, optim)
+
     checkpointer = DetectionCheckpointer(
         model,
         cfg.train.output_dir,
@@ -117,14 +144,13 @@ def do_train(args, cfg):
         [
             hooks.IterationTimer(),
             hooks.LRScheduler(scheduler=instantiate(cfg.lr_multiplier)),
-
             hooks.PeriodicCheckpointer(checkpointer, **cfg.train.checkpointer)
             if comm.is_main_process()
             else None,
-
             hooks.EvalHook(cfg.train.eval_period, lambda: do_test(cfg, model)),
-            hooks.EvalHook(cfg.train.eval_period, lambda: do_source_test(cfg, model)),
-
+            hooks.EvalHook(
+                cfg.train.eval_period, lambda: do_source_test(cfg, model)
+            ),
             hooks.PeriodicWriter(
                 default_writers(cfg.train.output_dir, cfg.train.max_iter),
                 period=cfg.train.log_period,
@@ -149,37 +175,31 @@ def main(args):
     cfg = LazyConfig.load(args.config_file)
     cfg = LazyConfig.apply_overrides(cfg, args.opts)
 
-    cfg.train.max_iter = 240000
-    cfg.train.checkpointer.period = 5000
-    cfg.train.eval_period = 10000
+    cfg.train.max_iter = 60000
+    cfg.train.checkpointer.period = 2000
+    cfg.train.eval_period = 1000
     cfg.train.log_period = 20
     cfg.optimizer.lr = 0.001
     cfg.lr_multiplier = LazyCall(WarmupParamScheduler)(
-        scheduler = LazyCall(MultiStepParamScheduler)(
-            # values=[1.0, 0.81, 0.73, 0.4, 0.1],
-            # milestones=[25000, 35000, 45000, 50000],
-            # values=[1.0, 0.81, 0.73, 0.65, 0.5],
-            # milestones=[25000, 35000, 40000, 45000, 50000],
-            # values = [1.0, 0.9, 0.1, 0.01],
-            # milestones=[25000, 50000, 60000, 70000],
-            # values = [1.0, 0.1, 0.01, 0.005],
-            # milestones=[45000, 50000, 60000, 70000],
+        scheduler=LazyCall(MultiStepParamScheduler)(
             values=[1.0, 0.81, 0.73, 0.65, 0.3, 0.1, 0.01],
-            milestones=[25000, 35000, 40000, 65000, 70000, 75000, 80000],
+            milestones=[25000, 35000, 40000, 45000, 50000, 55000, 60000],
         ),
-        warmup_length= 0.1,
+        warmup_length=0.1,
         warmup_method="linear",
         warmup_factor=0.001,
     )
     if args.num_gpus > 1:
-        cfg.model.backbone.bottom_up.stem.norm = \
-        cfg.model.backbone.bottom_up.stages.norm = "SyncBN"
+        cfg.model.backbone.bottom_up.stem.norm = (
+            cfg.model.backbone.bottom_up.stages.norm
+        ) = "SyncBN"
         cfg.model.backbone.norm = "SyncBN"
     else:
-        cfg.model.backbone.bottom_up.stem.norm = \
-        cfg.model.backbone.bottom_up.stages.norm = "BN"
+        cfg.model.backbone.bottom_up.stem.norm = (
+            cfg.model.backbone.bottom_up.stages.norm
+        ) = "BN"
         cfg.model.backbone.norm = "BN"
-    
+
     default_setup(cfg, args)
     if args.eval_only:
         model = instantiate(cfg.model)
